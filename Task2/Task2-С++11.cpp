@@ -1,96 +1,64 @@
-﻿#include <windows.h>
-#include <iostream>
-using namespace std;
+﻿#include <iostream>
+#include <vector>
+#include <thread>
+#include <algorithm>
+#include <chrono>
 
-int* arr = nullptr; //nullptr
-size_t arrSize = 0;
-int maxValue = 0;
-int minValue = 0;
-double arithmeticMean = 0.0;
+int main() {
+    int arrSize = 0;
+    std::cout << "Enter size of array: ";
+    std::cin >> arrSize;
 
-DWORD WINAPI min_max(LPVOID)
-{
-    maxValue = arr[0];
-    minValue = arr[0];
+    std::vector<int> arr(arrSize);
+    std::cout << "Enter " << arrSize << " elements of array:\n";
+    for (int i = 0; i < arrSize; ++i) {
+        std::cin >> arr[i];
+    }
 
-    for (int i = 0; i < arrSize; i++)
-    {
-        if (arr[i] <= minValue)
-        {
-            minValue = arr[i];
+    int maxValue = arr[0];
+    int minValue = arr[0];
+    double arithmeticMean = 0.0;
+
+    auto min_max = [&arr, &minValue, &maxValue]() {
+        minValue = arr[0];
+        maxValue = arr[0];
+
+        for (const auto& value : arr) {
+            if (value <= minValue) minValue = value;
+            std::this_thread::sleep_for(std::chrono::milliseconds(7));
+            if (value >= maxValue) maxValue = value;
+            std::this_thread::sleep_for(std::chrono::milliseconds(7));
         }
-        Sleep(7);
-        if (arr[i] >= maxValue)
-        {
-            maxValue = arr[i];
+
+        std::cout << "Minimum element of array : " << minValue << "\n";
+        std::cout << "Maximum element of array : " << maxValue << "\n";
+        };
+
+    auto average = [&arr, &arithmeticMean]() {
+        for (int i = 0; i < arr.size(); ++i) {
+            arithmeticMean += static_cast<double>(arr[i]) / arr.size();
+            std::this_thread::sleep_for(std::chrono::milliseconds(12));
         }
-        Sleep(7);
-    }
+        std::cout << "Arithmetic mean : " << arithmeticMean << " ~~ " << static_cast<int>(arithmeticMean) << "\n";
+        };
 
-    cout << "Minimum element of array : " << minValue << "\n";
-    cout << "Maximum element of array : " << maxValue << "\n";
+    std::thread min_max_thread(min_max);
+    std::thread average_thread(average);
 
-    return 0;
-}
+    min_max_thread.join();
+    average_thread.join();
 
-DWORD WINAPI average(LPVOID)
-{
-    for (int i = 0; i < arrSize; ++i)
-    {
-        arithmeticMean += static_cast<double>(arr[i]) / arrSize; //static_cast<...>
-        Sleep(12);
-    }
-    cout << "Arithmetic mean : " << arithmeticMean << " ~~ " << static_cast<int>(arithmeticMean) << "\n";
-
-    return 0;
-}
-
-int main()
-{
-    int i;
-    cout << "Eneter size of array : ";
-    cin >> arrSize;
-    arr = new int[arrSize];
-
-    cout << "Enter " << arrSize << " elements of array :\n";
-    for (i = 0; i < arrSize; i++)
-    {
-        cin >> arr[i];
-    }
-
-    HANDLE min_max_hThread;
-    DWORD  min_max_IDThread;
-    HANDLE average_hThread;
-    DWORD average_IDThread;
-
-    min_max_hThread = CreateThread(NULL, 0, min_max, NULL, 0, &min_max_IDThread);
-    average_hThread = CreateThread(NULL, 0, average, NULL, 0, &average_IDThread);
-
-    if (min_max_hThread == NULL || average_hThread == NULL)
-    {
-        return GetLastError();
-    }
-
-    WaitForSingleObject(average_hThread, INFINITE);
-    WaitForSingleObject(min_max_hThread, INFINITE);
-
-    CloseHandle(average_hThread);
-    CloseHandle(min_max_hThread);
-
-    for (i = 0; i < arrSize; i++)
-    {
-        if (arr[i] == maxValue || arr[i] == minValue)
-        {
-            arr[i] = static_cast<int>(arithmeticMean);
+    for (auto& element : arr) {
+        if (element == maxValue || element == minValue) {
+            element = static_cast<int>(arithmeticMean);
         }
     }
 
-    cout << "Changed array : ";
-    std::for_each(arr, arr + arrSize, [](int element) { //foreach
+    std::cout << "Changed array : ";
+    std::for_each(arr.begin(), arr.end(), [](int element) {
         std::cout << element << " ";
         });
-    cout << "\n";
+    std::cout << "\n";
 
-    delete[] arr;
     return 0;
 }
