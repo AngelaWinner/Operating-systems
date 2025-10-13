@@ -1,0 +1,169 @@
+﻿#include <windows.h>
+#include <iostream>
+#include <vector>
+#include <random>
+
+int* array;
+int arraySize;
+int markerThreadsCount;
+
+CRITICAL_SECTION cs;
+HANDLE startEvent;
+HANDLE* cantContinueEvents;
+HANDLE* continueEvents;
+bool* closeThreadFlags;
+
+struct markerThreadParams {
+    int index;
+    markerThreadParams(int indexX) : index(indexX) {};
+};
+
+DWORD WINAPI marker(LPVOID param) {
+    markerThreadParams* params = (markerThreadParams*)param;
+    int threadIndex = params->index;
+
+    int five = 5;
+    WaitForSingleObject(startEvent, INFINITE);
+    srand(threadIndex);
+
+    int markedElementCount = 0;
+    std::vector<int> markedIndices;
+
+    while (true) {
+        int randomNumber = rand() % arraySize;
+
+        EnterCriticalSection(&cs);
+        if (array[randomNumber] == 0) {
+            Sleep(five);
+            array[randomNumber] = threadIndex;
+            markedElementCount++;
+            markedIndices.push_back(randomNumber);
+            Sleep(five);
+            LeaveCriticalSection(&cs);
+        }
+        else {
+            std::cout << "Thread with threadIndex " << threadIndex
+                << ", marked " << markedElementCount
+                << " elements, thread cant mark index " << randomNumber << std::endl;
+            LeaveCriticalSection(&cs);
+
+            SetEvent(cantContinueEvents[threadIndex]); //установила событие только этого потока в сигнальное состояние
+            WaitForSingleObject(continueEvents[threadIndex], INFINITE);
+
+            if (closeThreadFlags[threadIndex]) { //если потоку нужно прекратить работу
+                EnterCriticalSection(&cs);
+                for (int index : markedIndices) {
+                    array[index] = 0;
+                }
+                LeaveCriticalSection(&cs);
+                delete params;
+                return 0;
+            }
+        }
+    }
+    delete params;
+    return 0;
+}
+
+int main() {
+    InitializeCriticalSection(&cs);
+
+    std::cout << "Enter size of array : ";
+    std::cin >> arraySize;
+    array = new int[arraySize]();
+
+    std::cout << "Enter number of marker threads : ";
+    std::cin >> markerThreadsCount;
+
+    startEvent = CreateEvent(NULL, TRUE, FALSE, NULL); //событие с ручным сбрососм, несигнальное состояние
+
+    cantContinueEvents = new HANDLE[markerThreadsCount];
+    continueEvents = new HANDLE[markerThreadsCount];
+    closeThreadFlags = new bool[markerThreadsCount]();
+
+    HANDLE* markerThreads = new HANDLE[markerThreadsCount];
+
+    for (int i = 0; i < markerThreadsCount; i++) {
+        cantContinueEvents[i] = CreateEvent(NULL, FALSE, FALSE, NULL); //события с автоматическим сбросом, несигнальное состояние
+        continueEvents[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
+        closeThreadFlags[i] = false;
+
+        markerThreadParams* params = new markerThreadParams(i);
+        markerThreads[i] = CreateThread(NULL, 0, marker, params, 0, NULL);
+    }
+
+    SetEvent(startEvent);
+
+    int activeThreadsCount = markerThreadsCount; //те, которые еще остались незавершенные
+    while (activeThreadsCount > 0) {
+        std::vector<HANDLE> activeCantContinueEvents;
+        for (int i = 0; i < markerThreadsCount; i++) {
+            if (!closeThreadFlags[i]) { //если потоку не нужно завершать своб работу
+                activeCantContinueEvents.push_back(cantContinueEvents[i]); //заполняю массив событиями cantContinueEvents
+            }
+        }
+
+        WaitForMultipleObjects(activeCantContinueEvents.size(),
+            activeCantContinueEvents.data(),
+            TRUE, INFINITE); //режим ожидание true -> жду когда все объекты перейдут в сигнальное состояние
+
+        std::cout << "Array contents : ";
+        for (int i = 0; i < arraySize; i++) {
+            std::cout << array[i] << " ";
+        }
+        std::cout << std::endl;
+
+        int threadIndexToClose;
+        do {
+            std::cout << "Enter thread index to close (0-" << markerThreadsCount - 1 << ") : ";
+            std::cin >> threadIndexToClose;
+        } while (threadIndexToClose < 0 || threadIndexToClose >= markerThreadsCount);
+
+        if (!closeThreadFlags[threadIndexToClose]) {
+
+            closeThreadFlags[threadIndexToClose] = true;
+            SetEvent(continueEvents[threadIndexToClose]);
+            WaitForSingleObject(markerThreads[threadIndexToClose], INFINITE);
+
+            activeThreadsCount--;
+
+            std::cout << "Array after thread " << threadIndexToClose << " closing : ";
+            for (int i = 0; i < arraySize; i++) {
+                std::cout << array[i] << " ";
+            }
+            std::cout << std::endl;
+
+            for (int i = 0; i < markerThreadsCount; i++) {
+                if (!closeThreadFlags[i]) {
+                    ResetEvent(cantContinueEvents[i]);
+                    SetEvent(continueEvents[i]);
+                }
+            }
+        }
+        else {
+            std::cout << "Thread have already been closed!" << std::endl;
+
+            for (int i = 0; i < markerThreadsCount; i++) {
+                if (!closeThreadFlags[i]) {
+                    ResetEvent(cantContinueEvents[i]);
+                    SetEvent(continueEvents[i]);
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < markerThreadsCount; i++) {
+        CloseHandle(markerThreads[i]);
+        CloseHandle(cantContinueEvents[i]);
+        CloseHandle(continueEvents[i]);
+    }
+    CloseHandle(startEvent);
+    DeleteCriticalSection(&cs);
+    delete[] array;
+    delete[] markerThreads;
+    delete[] cantContinueEvents;
+    delete[] continueEvents;
+    delete[] closeThreadFlags;
+    std::cout << "All threads completed. Program finished." << std::endl;
+    return 0;
+}
