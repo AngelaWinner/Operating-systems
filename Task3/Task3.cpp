@@ -3,6 +3,7 @@
 #include <vector>
 #include <random>
 #include <mutex>
+#include <thread>
 
 std::vector<int> array;
 int arraySize;
@@ -18,8 +19,7 @@ struct markerThreadParams {
     markerThreadParams(int indexX) : index(indexX) {};
 };
 
-DWORD WINAPI marker(LPVOID param) {
-    markerThreadParams* params = (markerThreadParams*)param;
+void marker(markerThreadParams* params) {
     int threadIndex = params->index;
 
     int five = 5;
@@ -32,14 +32,14 @@ DWORD WINAPI marker(LPVOID param) {
     while (counter <= 2 * arraySize) {
         int randomNumber = rand() % arraySize;
         counter++;
-        myMutex.lock(); // Захватываю мьютекс
+        myMutex.lock();
         if (array[randomNumber] == 0) {
             Sleep(five);
             array[randomNumber] = threadIndex;
             markedElementCount++;
             markedIndices.push_back(randomNumber);
             Sleep(five);
-            myMutex.unlock(); // Освобождаю мьютекс
+            myMutex.unlock();
         }
         else {
             std::cout << "Thread with threadIndex " << threadIndex
@@ -58,13 +58,13 @@ DWORD WINAPI marker(LPVOID param) {
                 }
                 myMutex.unlock();
                 delete params;
-                return 0;
+                return;
             }
         }
     }
     SetEvent(cantContinueEvents[threadIndex]);
     delete params;
-    return 0;
+    return;
 }
 
 int main() {
@@ -86,7 +86,7 @@ int main() {
     cantContinueEvents.resize(markerThreadsCount);
     continueEvents.resize(markerThreadsCount);
     closeThreadFlags.resize(markerThreadsCount);
-    std::vector<HANDLE> markerThreads(markerThreadsCount);
+    std::vector<std::thread> markerThreads;
 
     for (int i = 0; i < markerThreadsCount; ++i) {
         closeThreadFlags[i] = false;
@@ -98,7 +98,7 @@ int main() {
         closeThreadFlags[i] = false;
 
         markerThreadParams* params = new markerThreadParams(i);
-        markerThreads[i] = CreateThread(NULL, 0, marker, params, 0, NULL);
+        markerThreads.emplace_back(marker, params);
     }
 
     SetEvent(startEvent);
@@ -132,7 +132,9 @@ int main() {
 
             closeThreadFlags[threadIndexToClose] = true;
             SetEvent(continueEvents[threadIndexToClose]);
-            WaitForSingleObject(markerThreads[threadIndexToClose], INFINITE);
+            if (markerThreads[threadIndexToClose].joinable()) {
+                markerThreads[threadIndexToClose].join();
+            }
 
             activeThreadsCount--;
 
@@ -160,9 +162,12 @@ int main() {
             }
         }
     }
-
     for (int i = 0; i < markerThreadsCount; i++) {
-        CloseHandle(markerThreads[i]);
+        if (markerThreads[i].joinable()) {
+            markerThreads[i].join();
+        }
+    }
+    for (int i = 0; i < markerThreadsCount; i++) {
         CloseHandle(cantContinueEvents[i]);
         CloseHandle(continueEvents[i]);
     }
