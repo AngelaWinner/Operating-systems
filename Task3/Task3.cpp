@@ -2,11 +2,12 @@
 #include <iostream>
 #include <vector>
 #include <random>
+#include <mutex>
 
 std::vector<int> array;
 int arraySize;
 int markerThreadsCount;
-HANDLE hMutex;
+std::mutex myMutex;
 
 HANDLE startEvent;
 std::vector<HANDLE> cantContinueEvents;
@@ -31,29 +32,31 @@ DWORD WINAPI marker(LPVOID param) {
     while (counter <= 2 * arraySize) {
         int randomNumber = rand() % arraySize;
         counter++;
-        WaitForSingleObject(hMutex, INFINITE); //жду, когда мьютекс перейдет в сигнальное состояние. Мьютекс захвачен потоком
+        myMutex.lock(); // Захватываю мьютекс
         if (array[randomNumber] == 0) {
             Sleep(five);
             array[randomNumber] = threadIndex;
             markedElementCount++;
             markedIndices.push_back(randomNumber);
             Sleep(five);
-            ReleaseMutex(hMutex); //освобождаю мьютекс
+            myMutex.unlock(); // Освобождаю мьютекс
         }
         else {
             std::cout << "Thread with threadIndex " << threadIndex
                 << ", marked " << markedElementCount
                 << " elements, thread cant mark index " << randomNumber << std::endl;
-            ReleaseMutex(hMutex);
+            myMutex.unlock();
 
-            SetEvent(cantContinueEvents[threadIndex]); //установила событие только этого потока в сигнальное состояние
+            SetEvent(cantContinueEvents[threadIndex]);
             WaitForSingleObject(continueEvents[threadIndex], INFINITE);
             //markedElementCount = 0;
             
             if (closeThreadFlags[threadIndex]) {
+                myMutex.lock();
                 for (int index : markedIndices) {
                     array[index] = 0;
                 }
+                myMutex.unlock();
                 delete params;
                 return 0;
             }
@@ -65,7 +68,6 @@ DWORD WINAPI marker(LPVOID param) {
 }
 
 int main() {
-    hMutex = CreateMutex(NULL, FALSE, L"myMutex"); //мьютекс в сигнальном состоянии
     do {
         std::cout << "Enter size of array : ";
         std::cin >> arraySize;
@@ -112,7 +114,7 @@ int main() {
 
         WaitForMultipleObjects(activeCantContinueEvents.size(),
             activeCantContinueEvents.data(),
-            TRUE, INFINITE); //режим ожидание true -> жду когда все объекты перейдут в сигнальное состояние
+            TRUE, INFINITE);
 
         std::cout << "Array contents : ";
         for (int i = 0; i < arraySize; i++) {
@@ -165,7 +167,6 @@ int main() {
         CloseHandle(continueEvents[i]);
     }
     CloseHandle(startEvent);
-    CloseHandle(hMutex);
     std::cout << "All threads completed. Program finished." << std::endl;
     return 0;
 }
