@@ -3,16 +3,15 @@
 #include <vector>
 #include <random>
 
-int* array;
+std::vector<int> array;
 int arraySize;
 int markerThreadsCount;
+HANDLE hMutex;
 
-CRITICAL_SECTION cs;
 HANDLE startEvent;
-HANDLE* cantContinueEvents;
-HANDLE* continueEvents;
-bool* closeThreadFlags;
-
+std::vector<HANDLE> cantContinueEvents;
+std::vector<HANDLE> continueEvents;
+std::vector<bool> closeThreadFlags;
 struct markerThreadParams {
     int index;
     markerThreadParams(int indexX) : index(indexX) {};
@@ -28,60 +27,68 @@ DWORD WINAPI marker(LPVOID param) {
 
     int markedElementCount = 0;
     std::vector<int> markedIndices;
-
-    while (true) {
+    int counter = 0;
+    while (counter <= 2 * arraySize) {
         int randomNumber = rand() % arraySize;
-
-        EnterCriticalSection(&cs);
+        counter++;
+        WaitForSingleObject(hMutex, INFINITE); //жду, когда мьютекс перейдет в сигнальное состояние. Мьютекс захвачен потоком
         if (array[randomNumber] == 0) {
             Sleep(five);
             array[randomNumber] = threadIndex;
             markedElementCount++;
             markedIndices.push_back(randomNumber);
             Sleep(five);
-            LeaveCriticalSection(&cs);
+            ReleaseMutex(hMutex); //освобождаю мьютекс
         }
         else {
             std::cout << "Thread with threadIndex " << threadIndex
                 << ", marked " << markedElementCount
                 << " elements, thread cant mark index " << randomNumber << std::endl;
-            LeaveCriticalSection(&cs);
+            ReleaseMutex(hMutex);
 
             SetEvent(cantContinueEvents[threadIndex]); //установила событие только этого потока в сигнальное состояние
             WaitForSingleObject(continueEvents[threadIndex], INFINITE);
-
-            if (closeThreadFlags[threadIndex]) { //если потоку нужно прекратить работу
-                EnterCriticalSection(&cs);
+            //markedElementCount = 0;
+            
+            if (closeThreadFlags[threadIndex]) {
                 for (int index : markedIndices) {
                     array[index] = 0;
                 }
-                LeaveCriticalSection(&cs);
                 delete params;
                 return 0;
             }
         }
     }
+    SetEvent(cantContinueEvents[threadIndex]);
     delete params;
     return 0;
 }
 
 int main() {
-    InitializeCriticalSection(&cs);
-
-    std::cout << "Enter size of array : ";
-    std::cin >> arraySize;
-    array = new int[arraySize]();
-
-    std::cout << "Enter number of marker threads : ";
-    std::cin >> markerThreadsCount;
+    hMutex = CreateMutex(NULL, FALSE, L"myMutex"); //мьютекс в сигнальном состоянии
+    do {
+        std::cout << "Enter size of array : ";
+        std::cin >> arraySize;
+        if (arraySize <= 0) std::cout << "Uncorrect enter. Try anothet time :)" << std::endl;
+    } while (arraySize <= 0);
+    array.resize(arraySize, 0);
+    int markerThreadsCount;
+    do {
+        std::cout << "Enter number of marker threads : ";
+        std::cin >> markerThreadsCount;
+        if (markerThreadsCount <= 0) std::cout << "Uncorrect enter. Try anothet time :)" << std::endl;
+    } while (markerThreadsCount <= 0);
 
     startEvent = CreateEvent(NULL, TRUE, FALSE, NULL); //событие с ручным сбрососм, несигнальное состояние
 
-    cantContinueEvents = new HANDLE[markerThreadsCount];
-    continueEvents = new HANDLE[markerThreadsCount];
-    closeThreadFlags = new bool[markerThreadsCount]();
+    cantContinueEvents.resize(markerThreadsCount);
+    continueEvents.resize(markerThreadsCount);
+    closeThreadFlags.resize(markerThreadsCount);
+    std::vector<HANDLE> markerThreads(markerThreadsCount);
 
-    HANDLE* markerThreads = new HANDLE[markerThreadsCount];
+    for (int i = 0; i < markerThreadsCount; ++i) {
+        closeThreadFlags[i] = false;
+    }
 
     for (int i = 0; i < markerThreadsCount; i++) {
         cantContinueEvents[i] = CreateEvent(NULL, FALSE, FALSE, NULL); //события с автоматическим сбросом, несигнальное состояние
@@ -98,8 +105,8 @@ int main() {
     while (activeThreadsCount > 0) {
         std::vector<HANDLE> activeCantContinueEvents;
         for (int i = 0; i < markerThreadsCount; i++) {
-            if (!closeThreadFlags[i]) { //если потоку не нужно завершать своб работу
-                activeCantContinueEvents.push_back(cantContinueEvents[i]); //заполняю массив событиями cantContinueEvents
+            if (!closeThreadFlags[i]) {
+                activeCantContinueEvents.push_back(cantContinueEvents[i]);
             }
         }
 
@@ -158,12 +165,7 @@ int main() {
         CloseHandle(continueEvents[i]);
     }
     CloseHandle(startEvent);
-    DeleteCriticalSection(&cs);
-    delete[] array;
-    delete[] markerThreads;
-    delete[] cantContinueEvents;
-    delete[] continueEvents;
-    delete[] closeThreadFlags;
+    CloseHandle(hMutex);
     std::cout << "All threads completed. Program finished." << std::endl;
     return 0;
 }
