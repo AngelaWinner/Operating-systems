@@ -4,9 +4,10 @@
 #include <random>
 #include <mutex>
 #include <thread>
+#include <stdexcept>
 
-std::vector<int> array;
 int arraySize;
+std::vector<int>array;
 int markerThreadsCount;
 std::mutex myMutex;
 
@@ -20,36 +21,33 @@ struct markerThreadParams {
 };
 
 void marker(markerThreadParams* params) {
-    int threadIndex = params->index;
-
+    int threadNumber = params->index;
+    int threadIndex = threadNumber - 1;
     int five = 5;
     WaitForSingleObject(startEvent, INFINITE);
-    srand(threadIndex);
+    srand(threadNumber);
 
     int markedElementCount = 0;
     std::vector<int> markedIndices;
-    int counter = 0;
-    while (counter <= 2 * arraySize) {
+    while (true) {
         int randomNumber = rand() % arraySize;
-        counter++;
         myMutex.lock();
         if (array[randomNumber] == 0) {
             Sleep(five);
-            array[randomNumber] = threadIndex;
+            array[randomNumber] = threadNumber;
             markedElementCount++;
             markedIndices.push_back(randomNumber);
             Sleep(five);
             myMutex.unlock();
         }
         else {
-            std::cout << "Thread with threadIndex " << threadIndex
+            std::cout << "Thread with threadIndex " << threadNumber
                 << ", marked " << markedElementCount
                 << " elements, thread cant mark index " << randomNumber << std::endl;
             myMutex.unlock();
 
             SetEvent(cantContinueEvents[threadIndex]);
             WaitForSingleObject(continueEvents[threadIndex], INFINITE);
-            markedElementCount = 0;
 
             if (closeThreadFlags[threadIndex]) {
                 myMutex.lock();
@@ -68,18 +66,36 @@ void marker(markerThreadParams* params) {
 }
 
 int main() {
-    do {
-        std::cout << "Enter size of array : ";
-        std::cin >> arraySize;
-        if (arraySize <= 0) std::cout << "Uncorrect enter. Try anothet time :)" << std::endl;
-    } while (arraySize <= 0);
+    std::cout << "Enter size of array : ";
+    try {
+        if (!(std::cin >> arraySize)) {
+            throw std::runtime_error("Invalid input: not a number");
+        }
+        if (arraySize <= 0) {
+            std::cout << "Uncorrect enter. Try another time :)" << std::endl;
+            return 1;
+        }
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
     array.resize(arraySize, 0);
     int markerThreadsCount;
-    do {
-        std::cout << "Enter number of marker threads : ";
-        std::cin >> markerThreadsCount;
-        if (markerThreadsCount <= 0) std::cout << "Uncorrect enter. Try anothet time :)" << std::endl;
-    } while (markerThreadsCount <= 0);
+    std::cout << "Enter number of marker threads : ";
+    try {
+        if (!(std::cin >> markerThreadsCount)) {
+            throw std::runtime_error("Invalid input: not a number");
+        }
+        if (markerThreadsCount <= 0) {
+            std::cout << "Uncorrect enter. Try another time :)" << std::endl;
+            return 1;
+        }
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
 
     startEvent = CreateEvent(NULL, TRUE, FALSE, NULL); //событие с ручным сбрососм, несигнальное состояние
 
@@ -97,7 +113,7 @@ int main() {
         continueEvents[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
         closeThreadFlags[i] = false;
 
-        markerThreadParams* params = new markerThreadParams(i);
+        markerThreadParams* params = new markerThreadParams(i+1);
         markerThreads.emplace_back(marker, params);
     }
 
@@ -116,17 +132,23 @@ int main() {
             activeCantContinueEvents.data(),
             TRUE, INFINITE);
 
+        myMutex.lock();
         std::cout << "Array contents : ";
         for (int i = 0; i < arraySize; i++) {
             std::cout << array[i] << " ";
         }
         std::cout << std::endl;
+        myMutex.unlock();
 
+        int threadNumberToClose;
         int threadIndexToClose;
+        myMutex.lock();
         do {
-            std::cout << "Enter thread index to close (0-" << markerThreadsCount - 1 << ") : ";
-            std::cin >> threadIndexToClose;
-        } while (threadIndexToClose < 0 || threadIndexToClose >= markerThreadsCount);
+            std::cout << "Enter thread index to close (1-" << markerThreadsCount << ") : ";
+            std::cin >> threadNumberToClose;
+            threadIndexToClose = threadNumberToClose - 1;
+        } while (threadNumberToClose < 1 || threadNumberToClose >= markerThreadsCount + 1);
+        myMutex.unlock();
 
         if (!closeThreadFlags[threadIndexToClose]) {
 
@@ -138,11 +160,13 @@ int main() {
 
             activeThreadsCount--;
 
+            myMutex.lock();
             std::cout << "Array after thread " << threadIndexToClose << " closing : ";
             for (int i = 0; i < arraySize; i++) {
                 std::cout << array[i] << " ";
             }
             std::cout << std::endl;
+            myMutex.unlock();
 
             for (int i = 0; i < markerThreadsCount; i++) {
                 if (!closeThreadFlags[i]) {
