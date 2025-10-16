@@ -49,8 +49,8 @@ void marker(markerThreadParams* params) {
 
             SetEvent(cantContinueEvents[threadIndex]);
             WaitForSingleObject(continueEvents[threadIndex], INFINITE);
-            //markedElementCount = 0;
-            
+            markedElementCount = 0;
+
             if (closeThreadFlags[threadIndex]) {
                 myMutex.lock();
                 for (int index : markedIndices) {
