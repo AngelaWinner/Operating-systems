@@ -22,8 +22,8 @@ void clearMarkedElements(std::vector<int>& arr, const std::vector<int>& markedIn
 }
 
 void printArray(const std::vector<int>& arr) {
-    for (int val : arr) {
-        std::cout << val << " ";
+    for (int value : arr) {
+        std::cout << value << " ";
     }
     std::cout << std::endl;
 }
