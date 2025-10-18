@@ -1,0 +1,8 @@
+mkdir build
+cd build
+cmake ..
+ls
+cmake --build .
+ls
+cd Debug
+.\Task3CMake
