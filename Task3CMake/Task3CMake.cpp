@@ -43,17 +43,20 @@ void marker(markerThreadParams* params) {
     while (true) {
         int randomNumber = rand() % arraySize;
         bool wasMarked = false;
+        {
+            std::lock_guard<std::mutex> lock(myMutex);
+            if (array[randomNumber] == 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-        if (array[randomNumber] == 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                array[randomNumber] = threadNumber;
+                markedElementCount++;
+                markedIndices.push_back(randomNumber);
 
-            array[randomNumber] = threadNumber;
-            markedElementCount++;
-            markedIndices.push_back(randomNumber);
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                continue;
+            }
         }
-        else {
+        if (array[randomNumber] != 0) {
             {
                 std::lock_guard<std::mutex> lock(myMutex);
                 std::cout << "Thread with threadIndex " << threadNumber
