@@ -1,7 +1,5 @@
 ﻿#include <iostream>
-#include <string>
-#include <vector>
-#include <stdexcept>
+#include "Functions.h"
 
 class Element {
 public:
@@ -118,51 +116,30 @@ public:
         }
     }
 };
-
-std::string isPalindrom(int palindromNumber) {
-    std::string str = std::to_string(palindromNumber);
-    std::string reverseStr(str.rbegin(), str.rend());
-    if (str == reverseStr) {
-        return "Yes";
-    }
-    else {
-        return "No";
-    }
-}
-
-std::vector<long long> getFibonacciNumbers(int numberOfFibNums) {
-    if (numberOfFibNums <= 0) {
-        throw std::invalid_argument("Number of Fibonacci numbers must be positive");
-    }
-    std::vector<long long> FibonacciNumbers(numberOfFibNums);
-    FibonacciNumbers[0] = 0;
-    if (numberOfFibNums > 1) {
-        FibonacciNumbers[1] = 1;
-        for (int i = 2; i < numberOfFibNums; ++i) {
-            FibonacciNumbers[i] = FibonacciNumbers[i - 1] + FibonacciNumbers[i - 2];
-        }
-    }
-    return FibonacciNumbers;
-}
-
-int main() {
-    //1.  На вход натуральное число n. На выход контейнер с первыми n числами Фибоначчи.
+int inputNumber() {
     int n;
     std::cout << "Enter a positive number - the number of Fibonacci numbers: ";
+    if (!(std::cin >> n)) {
+        throw std::runtime_error("Invalid input: not a number");
+    }
+    if (n <= 0) {
+        throw std::runtime_error("Incorrect enter");
+    }
+    return n;
+}
+void printFibonacciNumbers(const std::vector<long long>& arr) {
+    for (size_t i = 0; i < arr.size(); ++i) {
+        std::cout << arr[i] << " ";
+    }
+}
+int main() {
+    //1.  На вход натуральное число n. На выход контейнер с первыми n числами Фибоначчи.
     try {
-        if (!(std::cin >> n)) {
-            throw std::runtime_error("Invalid input: not a number");
-        }
-        if (n <= 0) {
-            std::cout << "Incorrect enter. Try another time :)" << std::endl;
-            return 1;
-        }
+        int n = inputNumber();
         auto FibonacciNumbers = getFibonacciNumbers(n);
         std::cout << "Fibonacci numbers:\n";
-        for (int i = 0; i < n; ++i) {
-            std::cout << FibonacciNumbers[i] << " ";
-        }
-        std::cout << "\n" << "\n";
+        printFibonacciNumbers(FibonacciNumbers);
+        std::cout << "\n\n";
     }
     catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
@@ -174,7 +151,7 @@ int main() {
     std::cout << "Enter a positive number to check if it is a palindrome: ";
     try {
         if (!(std::cin >> palindromNumber)) {
-            throw std::runtime_error("Invalid input: not a number");
+            throw std::runtime_error("Invalid input: not a number or not an integer number");
         }
         if (palindromNumber < 0) {
             std::cout << "Incorrect enter. Try another time :)" << "\n";
