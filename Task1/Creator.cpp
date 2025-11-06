@@ -4,6 +4,7 @@
 #include <exception>
 #include "../Headers/Employee.h"
 
+int four = 4;
 int main(int argc, char* argv[]) {
 	Employee employee;
 	std::string binFileName = argv[1];
@@ -13,12 +14,12 @@ int main(int argc, char* argv[]) {
 		notesNumer = std::stoi(argv[2]);
 	}
 	catch (const std::invalid_argument& e) {
-		std::cout << "the number is not a number, lets make it equal to 4.\n";
-		notesNumer = 4;
+		std::cout << "the number is not a number, lets make it equal to " << four << ".\n";
+		notesNumer = four;
 	}
 	catch (const std::out_of_range& e) {
-		std::cout << "the number is too big, lets make it smaller and equal to 4.\n";
-		notesNumer = 4;
+		std::cout << "the number is too big, lets make it smaller and equal to " << four << ".\n";
+		notesNumer = four;
 	}
 
 	std::ofstream file;

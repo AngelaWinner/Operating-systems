@@ -3,18 +3,43 @@
 #include <windows.h>
 #include <string>
 #include <vector>
+#include <regex>
 #include <conio.h>
 #include "../Headers/Employee.h"
 
+void getString(std::string& numberOfNotes, std::string welcome, std::regex regex) {
+	std::string numberStr;
+	while (true) {
+		std::cout << welcome;
+		if (std::cin >> numberStr) {
+			if (std::regex_match(numberStr, regex)) {
+				numberOfNotes = numberStr;
+				break;
+			}
+			else {
+				std::cout << "Error: Number must be positive number.\n";
+			}
+		}
+		else {
+			std::cout << "Error: Please enter a valid integer positive number.\n";
+			std::cin.clear();
+			std::cin.ignore(INT_MAX, '\n');
+		}
+	}
+}
+
+//в класс Емплои добавить метод чтения, записи и сравнения, переопределить операции ввода и вывода - покрыть тестами
+//добавить описание проекта и инструменты, использованные в нем
 int main()
 {
+	std::regex filenameRegex("^[a-zA-Z0-9_-]+$");
+	std::regex numberRegex("^[1-9][0-9]*$");
 	std::string binFileName;
 	std::string notesNumber;
-
-	std::cout << "Enter name of a binary file : ";
-	std::cin >> binFileName;
-	std::cout << "Eneter a number of notes : ";
-	std::cin >> notesNumber;
+	std::string binFileWelcome = "Enter name of a binary file : ";
+	std::string notesNumberWelcome = "Eneter a number of notes : ";
+	getString(binFileName, binFileWelcome, filenameRegex);
+	getString(notesNumber, notesNumberWelcome, numberRegex);
 
 	std::string creatorString = "Creator.exe " + binFileName + " " + notesNumber;
 	std::wstring creatorLPWSTR = std::wstring(creatorString.begin(), creatorString.end());
@@ -43,6 +68,16 @@ int main()
 		while (inputFile.read((char*)&employ, sizeof(Employee))) {
 			employees.push_back(employ);
 		}
+		if (inputFile.eof()) {
+			std::cout << "The end of file is reached." << std::endl;
+		}
+		else if (inputFile.fail()) {
+			std::cerr << "Error in reading file." << std::endl;
+		}
+	}
+	else {
+		std::cerr << "Error - cant open file with name : " << binFileName << std::endl;
+		return -1;
 	}
 	inputFile.close();
 
