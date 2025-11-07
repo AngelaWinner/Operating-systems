@@ -6,7 +6,7 @@
 #include <regex>
 #include <conio.h>
 #include "../Headers/Employee.h"
-
+//#include "../Headers/Functions.h"
 void getString(std::string& numberOfNotes, std::string welcome, std::regex regex) {
 	std::string numberStr;
 	while (true) {
@@ -17,19 +17,16 @@ void getString(std::string& numberOfNotes, std::string welcome, std::regex regex
 				break;
 			}
 			else {
-				std::cout << "Error: Number must be positive number.\n";
+				std::cout << "Error: Input must be correct.\n";
 			}
 		}
 		else {
-			std::cout << "Error: Please enter a valid integer positive number.\n";
+			std::cout << "Error: Please enter a valid input.\n";
 			std::cin.clear();
 			std::cin.ignore(INT_MAX, '\n');
 		}
 	}
 }
-
-//в класс Емплои добавить метод чтения, записи и сравнения, переопределить операции ввода и вывода - покрыть тестами
-//добавить описание проекта и инструменты, использованные в нем
 int main()
 {
 	std::regex filenameRegex("^[a-zA-Z0-9_-]+$");
@@ -118,6 +115,10 @@ int main()
 		while (std::getline(outputFile, line)) {
 			std::cout << line << "\n";
 		}
+	}
+	else {
+		std::cerr << "Error - cant open file with name : " << textFileName << std::endl;
+		return -1;
 	}
 	outputFile.close();
 

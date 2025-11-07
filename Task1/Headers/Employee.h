@@ -8,7 +8,21 @@ struct Employee
     int num;
     char name[10];
     double hours;
-
+    Employee(int n, const char* nm, double h) : num(n), hours(h) {
+        if (nm != nullptr) {
+            int i = 0;
+            for (; i < 9 && nm[i] != '\0'; ++i) {
+                name[i] = nm[i];
+            }
+            name[i] = '\0';
+        }
+        else {
+            name[0] = '\0';
+        }
+    }
+    Employee() : num(0), hours(0.0) {
+        name[0] = '\0';
+    }
     bool operator<(const Employee& other) const {
         return num < other.num;
     }
