@@ -49,13 +49,23 @@ int main()
 {
     int i;
     cout << "Eneter size of array : ";
-    cin >> arrSize;
+    if (!(std::cin >> arrSize)) {
+        std::cerr << "Invalid input. Exiting." << std::endl;
+        std::cin.clear();
+        std::cin.ignore(INT_MAX, '\n');
+        return 1;
+    }
     arr = new int[arrSize];
 
     cout << "Enter " << arrSize << " elements of array :\n";
     for (i = 0; i < arrSize; i++)
     {
-        cin >> arr[i];
+        if (!(std::cin >> arr[i])) {
+            std::cerr << "Invalid input. Exiting." << std::endl;
+            std::cin.clear();
+            std::cin.ignore(INT_MAX, '\n');
+            return 1;
+        }
     }
 
     HANDLE min_max_hThread;
