@@ -82,7 +82,7 @@ int main()
 	HANDLE* hEventStarted = new HANDLE[numberOfSenders];
 	for (int i = 0; i < numberOfSenders; i++)
 	{
-		string eventName = "MyStartEvent" + std::to_string(i); // ”никальное им€ дл€ каждого Sender'а
+		string eventName = "MyStartEvent" + std::to_string(i); //                            Sender' 
 		std::wstring wideEventName = std::wstring(eventName.begin(), eventName.end());
 
 		hEventStarted[i] = CreateEventW(NULL, FALSE, FALSE, wideEventName.c_str());
@@ -94,7 +94,7 @@ int main()
 	}
 	for (int i = 0; i < numberOfSenders; i++)
 	{
-		SenderString = "Sender.exe " + binaryFileName + " " + std::to_string(i); // ѕередаем индекс
+		SenderString = "cmd.exe /c start Sender.exe " + binaryFileName + " " + std::to_string(i); //                
 		//std::wstring SenderLPWSTRConverting = std::wstring(SenderString.begin(), SenderString.end());
 		//wchar_t* commandLine = &SenderLPWSTRConverting[0];
 
@@ -109,7 +109,7 @@ int main()
 		CloseHandle(pi.hProcess);
 	}
 	cout << "Waiting for all senders to start..." << std::endl;
-	WaitForMultipleObjects(numberOfSenders, hEventStarted, TRUE, INFINITE); //жду всех
+	WaitForMultipleObjects(numberOfSenders, hEventStarted, TRUE, INFINITE); //        
 	cout << "All senders started successfully!" << std::endl;
 
 	int choice;

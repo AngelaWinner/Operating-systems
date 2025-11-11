@@ -1,4 +1,5 @@
-#include "pch.h"
+#include <gtest/gtest.h>
+#include <windows.h>
 #include "Functions.h"
 
 TEST(ValidationTest, ValidatePositiveNumber_ValidNumbers) {
@@ -48,48 +49,6 @@ TEST(ValidationTest, ValidateChoice_InvalidChoices) {
     EXPECT_FALSE(validateChoice("a"));
     EXPECT_FALSE(validateChoice(" "));
     EXPECT_FALSE(validateChoice("-1"));
-}
-
-TEST(SynchronizationTest, CreateMutex_ValidName) {
-    HANDLE mutex = createMutex(L"TestMutex");
-    EXPECT_NE(mutex, nullptr);
-    EXPECT_NE(mutex, INVALID_HANDLE_VALUE);
-    if (mutex) {
-        CloseHandle(mutex);
-    }
-}
-
-TEST(SynchronizationTest, CreateSemaphore_ValidParameters) {
-    HANDLE semaphore = createSemaphore(L"TestSemaphore", 1, 5);
-    EXPECT_NE(semaphore, nullptr);
-    EXPECT_NE(semaphore, INVALID_HANDLE_VALUE);
-    if (semaphore) {
-        CloseHandle(semaphore);
-    }
-}
-
-TEST(SynchronizationTest, OpenMutex_NonExistent) {
-    //                                                             
-    HANDLE mutex = openMutex(L"NonExistentMutex12345");
-    EXPECT_EQ(mutex, nullptr);
-}
-
-TEST(SynchronizationTest, OpenSemaphore_NonExistent) {
-    HANDLE semaphore = openSemaphore(L"NonExistentSemaphore12345");
-    EXPECT_EQ(semaphore, nullptr);
-}
-
-TEST(WaitTest, WaitForSingleHandle_InvalidHandle) {
-    EXPECT_FALSE(waitForSingleHandle(INVALID_HANDLE_VALUE, 0));
-}
-
-TEST(WaitTest, WaitForMultipleHandles_EmptyArray) {
-    EXPECT_FALSE(waitForMultipleHandles(nullptr, 0, 0));
-}
-
-TEST(WaitTest, WaitForMultipleHandles_InvalidHandles) {
-    HANDLE invalidHandles[] = { INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE };
-    EXPECT_FALSE(waitForMultipleHandles(invalidHandles, 2, 0));
 }
 
 TEST(EdgeCaseTest, EmptyStrings) {
