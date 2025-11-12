@@ -94,14 +94,13 @@ int main()
 	}
 	for (int i = 0; i < numberOfSenders; i++)
 	{
-		SenderString = "cmd.exe /c start Sender.exe " + binaryFileName + " " + std::to_string(i); //                
-		//std::wstring SenderLPWSTRConverting = std::wstring(SenderString.begin(), SenderString.end());
-		//wchar_t* commandLine = &SenderLPWSTRConverting[0];
+		string SenderString = "cmd.exe / c start Sender.exe " + binaryFileName + " " + std::to_string(i);
+		char* commandLine = _strdup(SenderString.c_str()); // Создаем копию строки
 
 		ZeroMemory(&si, sizeof(STARTUPINFO));
 		si.cb = sizeof(STARTUPINFO);
 
-		if (!CreateProcess(SenderString.c_str(), NULL, NULL, NULL, TRUE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
+		if (!CreateProcess(NULL, commandLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
 		{
 			std::cout << "The Sender process is not created.\n";
 			return GetLastError();
