@@ -82,7 +82,7 @@ int main()
 	HANDLE* hEventStarted = new HANDLE[numberOfSenders];
 	for (int i = 0; i < numberOfSenders; i++)
 	{
-		string eventName = "MyStartEvent" + std::to_string(i); //                            Sender' 
+		string eventName = "MyStartEvent" + std::to_string(i);
 		std::wstring wideEventName = std::wstring(eventName.begin(), eventName.end());
 
 		hEventStarted[i] = CreateEventW(NULL, FALSE, FALSE, wideEventName.c_str());
@@ -94,13 +94,13 @@ int main()
 	}
 	for (int i = 0; i < numberOfSenders; i++)
 	{
-		string SenderString = "cmd.exe / c start Sender.exe " + binaryFileName + " " + std::to_string(i);
-		char* commandLine = _strdup(SenderString.c_str()); // Создаем копию строки
+		string SenderString = "Sender.exe " + binaryFileName + " " + std::to_string(i);
+		char* commandLine = _strdup(SenderString.c_str());
 
 		ZeroMemory(&si, sizeof(STARTUPINFO));
 		si.cb = sizeof(STARTUPINFO);
 
-		if (!CreateProcess(NULL, commandLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+		if (!CreateProcess(NULL, commandLine, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
 		{
 			std::cout << "The Sender process is not created.\n";
 			return GetLastError();
