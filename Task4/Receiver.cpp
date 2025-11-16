@@ -58,6 +58,18 @@ int main()
 	file.open(binaryFileName, std::ios::out | std::ios::binary | std::ios::trunc);
 	file.close();
 
+	fstream posFile;
+	posFile.open(binaryFileName + ".pos", std::ios::out | std::ios::binary | std::ios::trunc);
+	int initialPosition = 0;
+	posFile.write(reinterpret_cast<const char*>(&initialPosition), sizeof(initialPosition));
+	posFile.close();
+
+	fstream readPosFile;
+	readPosFile.open(binaryFileName + ".readpos", std::ios::out | std::ios::binary | std::ios::trunc);
+	int initialReadPosition = 0;
+	readPosFile.write(reinterpret_cast<const char*>(&initialReadPosition), sizeof(initialReadPosition));
+	readPosFile.close();
+
 	int numberOfSenders;
 	string SendersWelcome = "Enter amount of senders processes: \n";
 	getNumber(numberOfSenders, SendersWelcome);
@@ -67,6 +79,12 @@ int main()
 	if (hNotesAmountSemaphore == NULL)
 	{
 		cout << "Error creating notes semaphore: " << GetLastError() << std::endl;
+		return GetLastError();
+	}
+	HANDLE hPositionMutex = CreateMutex(NULL, 0, L"MyPositionMutex");
+	if (hPositionMutex == NULL)
+	{
+		cout << "Error creating position mutex: " << GetLastError() << std::endl;
 		return GetLastError();
 	}
 	HANDLE hNotNotesAmountSemaphore = CreateSemaphore(NULL, numberOfNotes, numberOfNotes, L"MyNotNotesAmountSemaphore");
@@ -82,7 +100,7 @@ int main()
 	HANDLE* hEventStarted = new HANDLE[numberOfSenders];
 	for (int i = 0; i < numberOfSenders; i++)
 	{
-		string eventName = "MyStartEvent" + std::to_string(i); // Уникальное имя для каждого Sender'а
+		string eventName = "MyStartEvent" + std::to_string(i);
 		std::wstring wideEventName = std::wstring(eventName.begin(), eventName.end());
 
 		hEventStarted[i] = CreateEventW(NULL, FALSE, FALSE, wideEventName.c_str());
@@ -94,14 +112,15 @@ int main()
 	}
 	for (int i = 0; i < numberOfSenders; i++)
 	{
-		SenderString = "Sender.exe " + binaryFileName + " " + std::to_string(i); // Передаем индекс
-		std::wstring SenderLPWSTRConverting = std::wstring(SenderString.begin(), SenderString.end());
-		wchar_t* commandLine = &SenderLPWSTRConverting[0];
+		string SenderString = "Sender.exe " + binaryFileName + " " + std::to_string(i) + " " + std::to_string(numberOfNotes);
+
+		std::wstring wideCommandLine = std::wstring(SenderString.begin(), SenderString.end());
+		wchar_t* commandLine = _wcsdup(wideCommandLine.c_str());
 
 		ZeroMemory(&si, sizeof(STARTUPINFO));
 		si.cb = sizeof(STARTUPINFO);
 
-		if (!CreateProcess(NULL, commandLine, NULL, NULL, TRUE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
+		if (!CreateProcess(NULL, commandLine, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
 		{
 			std::cout << "The Sender process is not created.\n";
 			return GetLastError();
@@ -109,7 +128,7 @@ int main()
 		CloseHandle(pi.hProcess);
 	}
 	cout << "Waiting for all senders to start..." << std::endl;
-	WaitForMultipleObjects(numberOfSenders, hEventStarted, TRUE, INFINITE); //жду всех
+	WaitForMultipleObjects(numberOfSenders, hEventStarted, TRUE, INFINITE); //        
 	cout << "All senders started successfully!" << std::endl;
 
 	int choice;
@@ -133,21 +152,43 @@ int main()
 				WaitForSingleObject(hNotesAmountSemaphore, INFINITE);
 				WaitForSingleObject(hMutex, INFINITE);
 
-				file.open(binaryFileName, std::ios::in | std::ios::binary);
+				WaitForSingleObject(hPositionMutex, INFINITE);
+
+				file.open(binaryFileName, std::ios::in | std::ios::out | std::ios::binary);
 				if (!file.is_open()) {
 					cout << "Error opening file for reading" << std::endl;
+					ReleaseMutex(hPositionMutex);
 				}
 				else {
-					
+					int currentReadPosition = 0;
+					fstream readPosFile;
+					readPosFile.open(binaryFileName + ".readpos", std::ios::in | std::ios::binary);
+					if (readPosFile.is_open()) {
+						readPosFile.read(reinterpret_cast<char*>(&currentReadPosition), sizeof(currentReadPosition));
+						readPosFile.close();
+					}
+
+					cout << "Reading from position: " << currentReadPosition << std::endl;
+
 					char buffer[twenty] = { 0 };
-					file.seekg(readPosition);
+					file.seekg(currentReadPosition * twenty, std::ios::beg);
 					file.read(buffer, twenty);
 					std::cout << "Message: " << buffer << std::endl;
-					
-					readPosition += twenty;
-					if (readPosition >= numberOfNotes * twenty) {
-						readPosition = 0;
+
+					file.seekp(currentReadPosition * twenty, std::ios::beg);
+					std::string empty(twenty, '\0');
+					file.write(empty.c_str(), twenty);
+					file.close();
+
+					currentReadPosition = (currentReadPosition + 1) % numberOfNotes;
+
+					readPosFile.open(binaryFileName + ".readpos", std::ios::out | std::ios::binary | std::ios::trunc);
+					if (readPosFile.is_open()) {
+						readPosFile.write(reinterpret_cast<const char*>(&currentReadPosition), sizeof(currentReadPosition));
+						readPosFile.close();
 					}
+
+					ReleaseMutex(hPositionMutex);
 				}
 
 				ReleaseSemaphore(hNotNotesAmountSemaphore, 1, NULL);
@@ -167,5 +208,6 @@ int main()
 	CloseHandle(hNotesAmountSemaphore);
 	CloseHandle(hNotNotesAmountSemaphore);
 	CloseHandle(hMutex);
+	CloseHandle(hPositionMutex);
 	return 0;
 }
