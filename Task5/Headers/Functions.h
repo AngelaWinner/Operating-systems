@@ -134,7 +134,7 @@ void getEmployeeData(Employee& emp, int index, std::set<int>& usedIds) {
 	validInput = false;
 	while (!validInput) {
 		std::cout << "Enter employee name: \n";
-		std::cin.getline(emp.name, 11);
+		std::cin.getline(emp.name, 10);
 
 		if (strlen(emp.name) > 0) {
 			validInput = true;

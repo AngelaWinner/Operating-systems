@@ -21,7 +21,7 @@ int main()
 
     std::cout << "Client started. Waiting for server to be ready...\n";
 
-    Sleep(2000);
+    Sleep(500);
 
     while (true)
     {
@@ -96,7 +96,7 @@ int main()
             if (error == ERROR_FILE_NOT_FOUND) {
                 attempts++;
                 std::cout << "Server not ready yet (attempt " << attempts << " of " << MAX_ATTEMPTS << "). Waiting...\n";
-                Sleep(1000);
+                Sleep(500);
             }
             else {
                 std::cout << "Cannot connect to server. Error: " << error << "\n";
@@ -157,16 +157,26 @@ int main()
 
         if (operation == '1')
         {
-            std::cin.ignore(INT_MAX, '\n');
+            //std::cin.ignore(INT_MAX, '\n');
+            std::cout << "\nPress any key to start modifying...\n";
+            _getch();
 
             std::cout << "\n=== Modify Employee Data ===\n";
 
-            std::cout << "Enter new name (max 10 chars): ";
+            std::cout << "Enter new name (max 9 chars): ";
             std::string newName;
-            std::getline(std::cin, newName);
-
-            strncpy_s(employeeTemp.name, newName.c_str(), 10);
-            employeeTemp.name[10] = '\0';
+            while (true) {
+                std::getline(std::cin, newName);
+                if (!newName.empty()) {
+                    break;
+                }
+                std::cout << "Name cannot be empty! Enter name again: ";
+            }
+            if (newName.length() > 9) {
+                newName = newName.substr(0, 9);
+                std::cout << "Note: Name truncated to 9 characters.\n";
+            }
+            strncpy_s(employeeTemp.name, 10, newName.c_str(), _TRUNCATE);
 
             std::cout << "Enter new hours: ";
             getDouble(employeeTemp.hours, "");

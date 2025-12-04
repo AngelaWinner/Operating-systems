@@ -12,7 +12,6 @@ int numberOfEmployees;
 Employee* employees;
 int numberOfClients;
 
-// Структура для синхронизации по паттерну Readers-Writers
 struct EmployeeSync {
     HANDLE readMutex;
     HANDLE writeSemafore;
@@ -315,7 +314,7 @@ int main()
         return 1;
     }
 
-    Sleep(1000);
+    Sleep(500);
 
     std::cout << "Named pipe should be ready. Starting clients...\n";
 
@@ -343,7 +342,7 @@ int main()
         }
     }
 
-    Sleep(2000);
+    Sleep(500);
 
     std::cout << "\nAll clients have finished their work.\n";
 
