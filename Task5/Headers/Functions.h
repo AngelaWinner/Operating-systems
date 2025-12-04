@@ -2,6 +2,7 @@
 #include <string>
 #include <regex>
 #include <set>
+#include "../Headers/Employee.h"
 
 bool enter_ID_of_employee(int& ID) {
 	std::string idStr;
@@ -90,6 +91,56 @@ void getFileName(std::string& fileName) {
 			std::cout << "Only letters, numbers, _ and - symbols are allowed.\n";
 			std::cin.clear();
 			std::cin.ignore(INT_MAX, '\n');
+		}
+	}
+}
+
+void showEmployees(std::ifstream& in) {
+	int fileRecordCount;
+	in.read(reinterpret_cast<char*>(&fileRecordCount), sizeof(fileRecordCount));
+
+	std::cout << "Total records: " << fileRecordCount << std::endl;
+
+	Employee emp;
+	for (int i = 0; i < fileRecordCount; i++) {
+		in.read(reinterpret_cast<char*>(&emp), sizeof(Employee));
+
+		std::cout << "\nEmployee " << i + 1 << ":" << std::endl;
+		std::cout << "ID: " << emp.num << std::endl;
+		std::cout << "Name: " << emp.name << std::endl;
+		std::cout << "Hours: " << emp.hours << std::endl;
+	}
+}
+
+void getEmployeeData(Employee& emp, int index, std::set<int>& usedIds) {
+	bool validInput = false;
+
+	while (!validInput) {
+		std::cout << "Enter " << index + 1 << " employee ID: \n";
+
+		int id;
+		if (enter_ID_of_employee(id)) {
+			if (usedIds.find(id) == usedIds.end()) {
+				emp.num = id;
+				usedIds.insert(id);
+				validInput = true;
+			}
+			else {
+				std::cout << "Error: ID " << id << " is already used. Please enter a unique ID.\n";
+			}
+		}
+	}
+
+	validInput = false;
+	while (!validInput) {
+		std::cout << "Enter employee name: \n";
+		std::cin.getline(emp.name, 11);
+
+		if (strlen(emp.name) > 0) {
+			validInput = true;
+		}
+		else {
+			std::cout << "Error: Name cannot be empty.\n";
 		}
 	}
 }

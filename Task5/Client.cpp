@@ -1,150 +1,218 @@
 ﻿#include <conio.h>
 #include <windows.h>
 #include <iostream>
+#include <fstream>
 #include "../Headers/Employee.h"
 #include "../Headers/Functions.h"
 
-int main(int argc, char* argv)
+int main()
 {
-	int chosenOption;
-	DWORD dwBytesWritten;
-	DWORD dwBytesReaden;
-	int ID;
-	int commandToSend;
-	bool successWritening;
-	Employee* employee = nullptr;
-	
+    char operation;
+    DWORD dwBytesWritten;
+    DWORD dwBytesRead;
+    int employeeId;
+    bool success;
+    Employee employeeTemp;
 
-	HANDLE hStartEvent = OpenEvent(EVENT_MODIFY_STATE, FALSE, L"Process Started");
+    const wchar_t* PIPE_NAME = L"\\\\.\\pipe\\pipe_name";
 
-	if (hStartEvent == NULL)
-	{
-		std::cout << "Open event failed. \nEnter any char to exit.\n";
-		_getch();
-		return GetLastError();
-	}
-	SetEvent(hStartEvent);
+    std::string chosenOptionStr;
+    std::regex chosenOptionRegex("^[123]$");
 
-	HANDLE hPipe = CreateFile(L"\\\\.\\pipe\\pipe_name", GENERIC_WRITE | GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
-	if (hPipe == INVALID_HANDLE_VALUE)
-	{
-		std::cout << "Creation of the named pipe failed.\n The last error code: " << GetLastError() << "\n";
-		std::cout << "Press any char to finish server: ";
-		_getch();
-		return 0;
-	}
+    std::cout << "Client started. Waiting for server to be ready...\n";
 
-	std::string chosenOptionStr;
-	std::regex chosenOptionRegex("^[123]$");
+    Sleep(2000);
 
-	while (true)
-	{
-		ID = 0;
-		std::cout << "Choose option:\n 1. Modify data\n 2. Read data\n 3. Exit\n";
-		std::cin >> chosenOptionStr;
-		if (std::regex_match(chosenOptionStr, chosenOptionRegex)) {
-			chosenOption = std::stoi(chosenOptionStr);
+    while (true)
+    {
+        std::cout << "\n=======================================\n";
+        std::cout << "Choose operation: \n";
+        std::cout << "1. Modify employee data\n";
+        std::cout << "2. Read employee data\n";
+        std::cout << "3. Exit\n";
+        std::cout << "Your choice: ";
 
-			if (chosenOption == 1)
-			{
-				std::cout << "Enter ID of employee: \n";
-				bool enter = enter_ID_of_employee(ID);
+        std::cin >> chosenOptionStr;
 
-				commandToSend = ID * 10 + chosenOption;
+        if (!std::regex_match(chosenOptionStr, chosenOptionRegex)) {
+            std::cout << "Incorrect input! Please enter 1, 2 or 3.\n";
+            std::cin.clear();
+            std::cin.ignore(INT_MAX, '\n');
+            continue;
+        }
 
-				successWritening = WriteFile(hPipe, &commandToSend, sizeof(commandToSend), &dwBytesWritten, NULL);
+        int chosenOption = std::stoi(chosenOptionStr);
 
-				if (successWritening) std::cout << "Message was sent.\n";
-				else std::cout << "Message wasn't sent.\n";
+        if (chosenOption == 3) {
+            operation = '3';
 
-				bool writeningIsCorrect;
+            HANDLE hPipe = CreateFile(
+                PIPE_NAME,
+                GENERIC_WRITE | GENERIC_READ,
+                0,
+                NULL,
+                OPEN_EXISTING,
+                0,
+                NULL
+            );
 
-				ReadFile(hPipe, &writeningIsCorrect, sizeof(writeningIsCorrect), &dwBytesReaden, NULL);
+            if (hPipe != INVALID_HANDLE_VALUE) {
+                WriteFile(hPipe, &operation, sizeof(operation), &dwBytesWritten, NULL);
+                CloseHandle(hPipe);
+            }
 
-				if (!writeningIsCorrect)
-				{
-					std::cout << "ID is incorrect. Try again.\n";
-					continue;
-				}
+            std::cout << "Exiting client...\n";
+            break;
+        }
 
-				employee = new Employee();
+        operation = (chosenOption == 1) ? '1' : '2';
 
-				if (!ReadFile(hPipe, employee, sizeof(Employee), &dwBytesReaden, NULL))
-				{
-					std::cout << "Data reading from the named pipe failed.\n" << "The last error code: " << GetLastError() << "\n";
-					std::cout << "Press any char to finish server: \n";
-					_getch();
-					return 0;
-				}
+        std::cout << "Enter employee ID : ";
+        bool validId = false;
+        while (!validId) {
+            validId = enter_ID_of_employee(employeeId);
+        }
 
-				std::cout << "ID of employee: " << employee->num << "\nName of employee: " << employee->name << "\nHours of employee: " << employee->hours << "\n";
+        HANDLE hPipe = INVALID_HANDLE_VALUE;
+        int attempts = 0;
+        const int MAX_ATTEMPTS = 5;
 
-				std::cout << "Enter new Name:\n";
-				std::cin.getline(employee->name, 11);
+        while (attempts < MAX_ATTEMPTS) {
+            hPipe = CreateFile(
+                PIPE_NAME,
+                GENERIC_WRITE | GENERIC_READ,
+                0,
+                NULL,
+                OPEN_EXISTING,
+                0,
+                NULL
+            );
 
-				std::string hoursWelcome = "Enter employee hours:\n";
-				getDouble(employee->hours, hoursWelcome);
+            if (hPipe != INVALID_HANDLE_VALUE) {
+                break;
+            }
 
-				std::cout << "Press any key to send modified record to Server\n";
-				_getch();
+            DWORD error = GetLastError();
+            if (error == ERROR_FILE_NOT_FOUND) {
+                attempts++;
+                std::cout << "Server not ready yet (attempt " << attempts << " of " << MAX_ATTEMPTS << "). Waiting...\n";
+                Sleep(1000);
+            }
+            else {
+                std::cout << "Cannot connect to server. Error: " << error << "\n";
+                break;
+            }
+        }
 
-				successWritening = WriteFile(hPipe, employee, sizeof(Employee), &dwBytesWritten, NULL);
+        if (hPipe == INVALID_HANDLE_VALUE) {
+            std::cout << "Failed to connect to server after " << MAX_ATTEMPTS << " attempts.\n";
+            std::cout << "Press any key to continue...\n";
+            _getch();
+            continue;
+        }
 
-				if (successWritening) std::cout << "Message was sent.\n";
-				else std::cout << "Message wasn't sent.\n";
+        DWORD mode = PIPE_READMODE_MESSAGE;
+        SetNamedPipeHandleState(hPipe, &mode, NULL, NULL);
 
-				std::cout << "Press any key to end the selected option\n";
-				_getch();
+        success = WriteFile(hPipe, &operation, sizeof(operation), &dwBytesWritten, NULL);
+        if (!success) {
+            std::cout << "Failed to send operation. Error: " << GetLastError() << "\n";
+            CloseHandle(hPipe);
+            continue;
+        }
 
-				commandToSend = 1;
-				WriteFile(hPipe, &commandToSend, sizeof(commandToSend), &dwBytesWritten, NULL);
-			}
-			else if (chosenOption == 2)
-			{
-				std::cout << "Enter ID of employee: \n";
-				bool enter = enter_ID_of_employee(ID);
+        success = WriteFile(hPipe, &employeeId, sizeof(employeeId), &dwBytesWritten, NULL);
+        if (!success) {
+            std::cout << "Failed to send employee ID. Error: " << GetLastError() << "\n";
+            CloseHandle(hPipe);
+            continue;
+        }
 
-				commandToSend = ID * 10 + chosenOption;
-				successWritening = WriteFile(hPipe, &commandToSend, sizeof(commandToSend), &dwBytesWritten, NULL);
+        bool employeeFound;
+        success = ReadFile(hPipe, &employeeFound, sizeof(employeeFound), &dwBytesRead, NULL);
+        if (!success) {
+            std::cout << "Failed to receive response from server. Error: " << GetLastError() << "\n";
+            CloseHandle(hPipe);
+            continue;
+        }
 
-				if (successWritening) std::cout << "Message was sent.\n";
-				else std::cout << "Message wasn't sent.\n";
+        if (!employeeFound) {
+            std::cout << "Employee with ID " << employeeId << " not found on server.\n";
+            CloseHandle(hPipe);
+            continue;
+        }
 
-				bool writeningIsCorrect;
+        success = ReadFile(hPipe, &employeeTemp, sizeof(Employee), &dwBytesRead, NULL);
+        if (!success) {
+            std::cout << "Failed to receive employee data. Error: " << GetLastError() << "\n";
+            CloseHandle(hPipe);
+            continue;
+        }
 
-				ReadFile(hPipe, &writeningIsCorrect, sizeof(writeningIsCorrect), &dwBytesReaden, NULL);
+        std::cout << "\n=== Employee Information ===\n";
+        std::cout << "ID: " << employeeTemp.num << "\n";
+        std::cout << "Name: " << employeeTemp.name << "\n";
+        std::cout << "Hours: " << employeeTemp.hours << "\n";
+        std::cout << "===========================\n";
 
-				if (!writeningIsCorrect)
-				{
-					std::cout << "ID is incorrect. Try again.\n";
-					continue;
-				}
+        if (operation == '1')
+        {
+            std::cin.ignore(INT_MAX, '\n');
 
-				employee = new Employee();
+            std::cout << "\n=== Modify Employee Data ===\n";
 
-				if (!ReadFile(hPipe, employee, sizeof(Employee), &dwBytesReaden, NULL))
-				{
-					std::cout << "Data reading from the named pipe failed.\n" << "The last error code: " << GetLastError() << "\n";
-					std::cout << "Press any char to finish server: \n";
-					_getch();
-					return 0;
-				}
+            std::cout << "Enter new name (max 10 chars): ";
+            std::string newName;
+            std::getline(std::cin, newName);
 
-				std::cout << "ID of employee: " << employee->num << "\nName of employee: " << employee->name << "\nHours of employee: " << employee->hours << "\n";
-				std::cout << "Press any key to end the selected option\n";
-				_getch();
+            strncpy_s(employeeTemp.name, newName.c_str(), 10);
+            employeeTemp.name[10] = '\0';
 
-				commandToSend = 1;
-				WriteFile(hPipe, &commandToSend, sizeof(commandToSend), &dwBytesWritten, NULL);
-			}
-			else  if (chosenOption == 3) break;
-		}
-		else {
-			std::cout << "Incorrect input\nTry again...";
-			std::cin.clear();
-			std::cin.ignore(INT_MAX, '\n');
-		}
-	}
+            std::cout << "Enter new hours: ";
+            getDouble(employeeTemp.hours, "");
 
-	return 0;
+            std::cout << "\nPress any key to send modified record to Server...\n";
+            _getch();
+
+            success = WriteFile(hPipe, &employeeTemp, sizeof(Employee), &dwBytesWritten, NULL);
+            if (!success) {
+                std::cout << "Failed to send modified data. Error: " << GetLastError() << "\n";
+                CloseHandle(hPipe);
+                continue;
+            }
+
+            std::cout << "Modified data sent to server.\n";
+        }
+
+        std::cout << "\nPress any key to end the selected operation...\n";
+        _getch();
+
+        char finishSignal = '0';
+        WriteFile(hPipe, &finishSignal, sizeof(finishSignal), &dwBytesWritten, NULL);
+
+        CloseHandle(hPipe);
+
+        std::ofstream loggingOut("clientLogging.txt", std::ios::app);
+        if (loggingOut.is_open()) {
+            loggingOut << "Operation: " << (operation == '2' ? "READ" : "MODIFY")
+                << ", Employee ID: " << employeeId
+                << ", Status: SUCCESS\n";
+            loggingOut.close();
+        }
+    }
+
+    std::ifstream loggingIn("clientLogging.txt");
+    if (loggingIn.is_open()) {
+        std::cout << "\n=== Client Log ===\n";
+        std::string line;
+        while (std::getline(loggingIn, line)) {
+            std::cout << line << "\n";
+        }
+        loggingIn.close();
+    }
+
+    std::cout << "\nClient terminated. Press any key to exit...\n";
+    _getch();
+
+    return 0;
 }

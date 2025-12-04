@@ -11,398 +11,362 @@ std::string fileName;
 int numberOfEmployees;
 Employee* employees;
 int numberOfClients;
-HANDLE* hSemaphore;
-HANDLE* hStartedEvent;
-HANDLE* hPipe;
+
+// Структура для синхронизации по паттерну Readers-Writers
+struct EmployeeSync {
+    HANDLE readMutex;
+    HANDLE writeSemafore;
+    HANDLE employeeDataMutex;
+    int readerCount;
+
+    EmployeeSync() : readMutex(NULL), writeSemafore(NULL), employeeDataMutex(NULL), readerCount(0) {}
+};
+
+EmployeeSync* employeeSync;
 HANDLE* hThreads;
 PROCESS_INFORMATION* piArray;
 
-DWORD WINAPI messaging(LPVOID pipe)
+DWORD WINAPI messaging(LPVOID param)
 {
-	HANDLE hPipe = (HANDLE)pipe;
-	DWORD dwBytesRead;
-	DWORD dwBytesWrite;
+    HANDLE hPipe = (HANDLE)param;
+    DWORD dwBytesRead;
+    DWORD dwBytesWrite;
 
-	int message;
-	int chosenOption;
-	Employee* employeeToShare = nullptr;
-	bool successWritening;
-	int ID;
-	bool everythingIsRight;
-	int command;
+    char operation;
+    int employeeId;
+    Employee employeeTemp;
+    bool success;
+    int indexOfEmployee = -1;
+    char finishSignal;
 
-	while (true)
-	{
-		if (!ReadFile(hPipe, &message, sizeof(message), &dwBytesRead, NULL))
-			return 0;
+    while (true)
+    {
+        if (!ReadFile(hPipe, &operation, sizeof(operation), &dwBytesRead, NULL)) break;
 
-		ID = message / 10;
-		chosenOption = message % 10;
-		everythingIsRight = false;
+        if (operation == '3') {
+            std::cout << "Client requested exit.\n";
+            break;
+        }
 
-		for (int i = 0; i < numberOfEmployees; i++)
-		{
-			if (employees[i].num == ID)
-			{
-				ID = i;
-				everythingIsRight = true;
-			}
-		}
+        if (!ReadFile(hPipe, &employeeId, sizeof(employeeId), &dwBytesRead, NULL)) break;
 
-		WriteFile(hPipe, &everythingIsRight, sizeof(everythingIsRight), &dwBytesWrite, NULL);
+        indexOfEmployee = -1;
+        for (int i = 0; i < numberOfEmployees; i++) {
+            if (employees[i].num == employeeId) {
+                indexOfEmployee = i;
+                break;
+            }
+        }
 
-		if (!everythingIsRight)
-			continue;
+        bool found = (indexOfEmployee != -1);
+        WriteFile(hPipe, &found, sizeof(found), &dwBytesWrite, NULL);
 
-		if (chosenOption == 1)
-		{
-			for (int i = 0; i < numberOfClients; i++) {
-				WaitForSingleObject(hSemaphore[ID], INFINITE);
-			}
+        if (!found) continue;
 
-			employeeToShare = new Employee();
+        if (operation == '2') {
+            WaitForSingleObject(employeeSync[indexOfEmployee].readMutex, INFINITE);
+            employeeSync[indexOfEmployee].readerCount++;
+            if (employeeSync[indexOfEmployee].readerCount == 1) {
+                WaitForSingleObject(employeeSync[indexOfEmployee].writeSemafore, INFINITE);
+            }
+            ReleaseMutex(employeeSync[indexOfEmployee].readMutex);
 
-			employeeToShare->num = employees[ID].num;
-			employeeToShare->hours = employees[ID].hours;
-			strcpy_s(employeeToShare->name, employees[ID].name);
+            WaitForSingleObject(employeeSync[indexOfEmployee].employeeDataMutex, INFINITE);
+            employeeTemp.num = employees[indexOfEmployee].num;
+            employeeTemp.hours = employees[indexOfEmployee].hours;
+            strcpy_s(employeeTemp.name, employees[indexOfEmployee].name);
+            ReleaseMutex(employeeSync[indexOfEmployee].employeeDataMutex);
 
-			successWritening = WriteFile(hPipe, employeeToShare, sizeof(Employee), &dwBytesWrite, NULL);
+            success = WriteFile(hPipe, &employeeTemp, sizeof(Employee), &dwBytesWrite, NULL);
 
-			if (successWritening) std::cout << "Data to modify was sent.\n";
-			else std::cout << "Data to modify wasn't sent.\n";
+            if (success) std::cout << "Reading data for employee ID " << employeeId << " was sent.\n";
+            else std::cout << "Failed to send reading data.\n";
 
-			ReadFile(hPipe, employeeToShare, sizeof(Employee), &dwBytesWrite, NULL);
+            ReadFile(hPipe, &finishSignal, sizeof(finishSignal), &dwBytesRead, NULL);
 
-			employees[ID].hours = employeeToShare->hours;
-			strcpy_s(employees[ID].name, employeeToShare->name);
+            WaitForSingleObject(employeeSync[indexOfEmployee].readMutex, INFINITE);
+            employeeSync[indexOfEmployee].readerCount--;
+            if (employeeSync[indexOfEmployee].readerCount == 0) {
+                ReleaseSemaphore(employeeSync[indexOfEmployee].writeSemafore, 1, NULL);
+            }
+            ReleaseMutex(employeeSync[indexOfEmployee].readMutex);
+        }
+        else if (operation == '1') {
+            WaitForSingleObject(employeeSync[indexOfEmployee].writeSemafore, INFINITE);
+            WaitForSingleObject(employeeSync[indexOfEmployee].employeeDataMutex, INFINITE);
 
-			/*std::ofstream out(fileName);
+            employeeTemp.num = employees[indexOfEmployee].num;
+            employeeTemp.hours = employees[indexOfEmployee].hours;
+            strcpy_s(employeeTemp.name, employees[indexOfEmployee].name);
 
-			for (int i = 0; i < numberOfEmployees; i++) {
-				out << employees[i].num << " " << employees[i].name << " " << employees[i].hours << "\n";
-			}
+            success = WriteFile(hPipe, &employeeTemp, sizeof(Employee), &dwBytesWrite, NULL);
 
-			out.close();*/
+            if (success) std::cout << "Data for modification (employee ID " << employeeId << ") was sent.\n";
+            else std::cout << "Failed to send data for modification.\n";
 
-			std::ofstream out(fileName, std::ios::binary | std::ios::out);
-			if (!out.is_open()) {
-				std::cerr << "Error: Failed to open binary file '" << fileName << "' for writing\n";
-				
-			}
-			out.write(reinterpret_cast<const char*>(&numberOfEmployees), sizeof(numberOfEmployees));
-			for (int i = 0; i < numberOfEmployees; i++) {
-				out.write(reinterpret_cast<const char*>(&employees[i]), sizeof(Employee));
+            Employee modifiedEmployee;
+            ReadFile(hPipe, &modifiedEmployee, sizeof(Employee), &dwBytesRead, NULL);
 
-				if (!out.good()) {
-					std::cerr << "Error: Failed to write employee #" << i + 1 << " to binary file\n";
-					out.close();
-					
-				}
-			}
-			out.close();
+            employees[indexOfEmployee].hours = modifiedEmployee.hours;
+            strcpy_s(employees[indexOfEmployee].name, modifiedEmployee.name);
 
+            std::fstream file(fileName, std::ios::binary | std::ios::in | std::ios::out);
+            if (file.is_open()) {
+                file.seekp(sizeof(int) + indexOfEmployee * sizeof(Employee), std::ios::beg);
+                file.write(reinterpret_cast<const char*>(&employees[indexOfEmployee]), sizeof(Employee));
+                file.close();
+                std::cout << "Employee ID " << employeeId << " updated in file.\n";
+            }
+            else {
+                std::cerr << "Error: Failed to update file for employee ID " << employeeId << "\n";
+            }
 
-			ReadFile(hPipe, &command, sizeof(command), &dwBytesWrite, NULL);
+            ReadFile(hPipe, &finishSignal, sizeof(finishSignal), &dwBytesRead, NULL);
 
-			if (command == 1)
-				for (int i = 0; i < numberOfClients; i++)
-					ReleaseSemaphore(hSemaphore[ID], 1, NULL);
-		}
-		else if (chosenOption == 2)
-		{
-			WaitForSingleObject(hSemaphore[ID], INFINITE);
+            ReleaseMutex(employeeSync[indexOfEmployee].employeeDataMutex);
+            ReleaseSemaphore(employeeSync[indexOfEmployee].writeSemafore, 1, NULL);
+        }
+    }
 
-			employeeToShare = new Employee();
-			employeeToShare->num = employees[ID].num;
-			employeeToShare->hours = employees[ID].hours;
-			strcpy_s(employeeToShare->name, employees[ID].name);
-
-			successWritening = WriteFile(hPipe, employeeToShare, sizeof(Employee), &dwBytesWrite, NULL);
-
-			if (successWritening) std::cout << "Data to read was sent.\n";
-			else std::cout << "Data to read wasn't sent.\n";
-
-			ReadFile(hPipe, &command, sizeof(command), &dwBytesWrite, NULL);
-
-			if (command == 1)
-				ReleaseSemaphore(hSemaphore[ID], 1, NULL);
-		}
-	}
-
-	DisconnectNamedPipe(hPipe);
-	CloseHandle(hPipe);
+    DisconnectNamedPipe(hPipe);
+    CloseHandle(hPipe);
+    return 0;
 }
 
-void getEmployeeData(Employee& emp, int index, std::set<int>& usedIds) {
-	bool validInput = false;
+DWORD WINAPI pipeListener(LPVOID param)
+{
+    HANDLE hPipe = CreateNamedPipe(
+        L"\\\\.\\pipe\\pipe_name",
+        PIPE_ACCESS_DUPLEX,
+        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+        PIPE_UNLIMITED_INSTANCES,
+        1024,
+        1024,
+        0,
+        NULL
+    );
 
-	while (!validInput) {
-		std::cout << "Enter " << index + 1 << " employee ID: \n";
+    if (hPipe == INVALID_HANDLE_VALUE) {
+        std::cout << "Failed to create named pipe. Error: " << GetLastError() << "\n";
+        return 1;
+    }
 
-		int id;
-		if (enter_ID_of_employee(id)) {
-			if (usedIds.find(id) == usedIds.end()) {
-				emp.num = id;
-				usedIds.insert(id);
-				validInput = true;
-			}
-			else {
-				std::cout << "Error: ID " << id << " is already used. Please enter a unique ID.\n";
-			}
-		}
-	}
+    std::cout << "Named pipe created. Waiting for connections...\n";
 
-	validInput = false;
-	while (!validInput) {
-		std::cout << "Enter employee name: \n";
-		std::cin.getline(emp.name, 11);
+    while (true)
+    {
+        BOOL connected = ConnectNamedPipe(hPipe, NULL);
+        if (!connected) {
+            DWORD error = GetLastError();
+            if (error == ERROR_PIPE_CONNECTED) {
+                std::cout << "Client connected.\n";
+            }
+            else {
+                std::cout << "Connection failed. Error: " << error << "\n";
+                CloseHandle(hPipe);
+                return 1;
+            }
+        }
+        else {
+            std::cout << "Client connected.\n";
+        }
 
-		if (strlen(emp.name) > 0) {
-			validInput = true;
-		}
-		else {
-			std::cout << "Error: Name cannot be empty.\n";
-		}
-	}
+        HANDLE hThread = CreateThread(NULL, 0, messaging, (LPVOID)hPipe, 0, NULL);
+        if (hThread == NULL) {
+            std::cerr << "Failed to create thread for client. Error: " << GetLastError() << "\n";
+            DisconnectNamedPipe(hPipe);
+            CloseHandle(hPipe);
+        }
+        else {
+            CloseHandle(hThread);
+        }
+
+        hPipe = CreateNamedPipe(
+            L"\\\\.\\pipe\\pipe_name",
+            PIPE_ACCESS_DUPLEX,
+            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+            PIPE_UNLIMITED_INSTANCES,
+            1024,
+            1024,
+            0,
+            NULL
+        );
+
+        if (hPipe == INVALID_HANDLE_VALUE) {
+            std::cout << "Failed to create new named pipe. Error: " << GetLastError() << "\n";
+            break;
+        }
+    }
+
+    return 0;
 }
 
 void cleanUp() {
-	if (hSemaphore != nullptr) {
-		for (int i = 0; i < numberOfEmployees; i++) {
-			if (hSemaphore[i] != NULL && hSemaphore[i] != INVALID_HANDLE_VALUE) {
-				CloseHandle(hSemaphore[i]);
-				hSemaphore[i] = NULL;
-			}
-		}
-		delete[] hSemaphore;
-		hSemaphore = nullptr;
-	}
+    if (employeeSync != nullptr) {
+        for (int i = 0; i < numberOfEmployees; i++) {
+            if (employeeSync[i].readMutex != NULL)
+                CloseHandle(employeeSync[i].readMutex);
+            if (employeeSync[i].writeSemafore != NULL)
+                CloseHandle(employeeSync[i].writeSemafore);
+            if (employeeSync[i].employeeDataMutex != NULL)
+                CloseHandle(employeeSync[i].employeeDataMutex);
+        }
+        delete[] employeeSync;
+        employeeSync = nullptr;
+    }
 
-	if (hStartedEvent != nullptr) {
-		for (int i = 0; i < numberOfClients; i++) {
-			if (hStartedEvent[i] != NULL && hStartedEvent[i] != INVALID_HANDLE_VALUE) {
-				CloseHandle(hStartedEvent[i]);
-				hStartedEvent[i] = NULL;
-			}
-		}
-		delete[] hStartedEvent;
-		hStartedEvent = nullptr;
-	}
+    if (hThreads != nullptr) {
+        for (int i = 0; i < numberOfClients; i++) {
+            if (hThreads[i] != NULL) {
+                WaitForSingleObject(hThreads[i], 1000);
+                CloseHandle(hThreads[i]);
+            }
+        }
+        delete[] hThreads;
+        hThreads = nullptr;
+    }
 
-	if (hThreads != nullptr) {
-		for (int i = 0; i < numberOfClients; i++) {
-			if (hThreads[i] != NULL && hThreads[i] != INVALID_HANDLE_VALUE) {
-				WaitForSingleObject(hThreads[i], 1000);
-				CloseHandle(hThreads[i]);
-				hThreads[i] = NULL;
-			}
-		}
-		delete[] hThreads;
-		hThreads = nullptr;
-	}
+    if (piArray != nullptr) {
+        for (int i = 0; i < numberOfClients; i++) {
+            if (piArray[i].hProcess != NULL)
+                CloseHandle(piArray[i].hProcess);
+            if (piArray[i].hThread != NULL)
+                CloseHandle(piArray[i].hThread);
+        }
+        delete[] piArray;
+        piArray = nullptr;
+    }
 
-	if (hPipe != nullptr) {
-		for (int i = 0; i < numberOfClients; i++) {
-			if (hPipe[i] != NULL && hPipe[i] != INVALID_HANDLE_VALUE) {
-				DisconnectNamedPipe(hPipe[i]);
-				CloseHandle(hPipe[i]);
-				hPipe[i] = NULL;
-			}
-		}
-		delete[] hPipe;
-		hPipe = nullptr;
-	}
-
-	if (piArray != nullptr) {
-		for (int i = 0; i < numberOfClients; i++) {
-			if (piArray[i].hProcess != NULL && piArray[i].hProcess != INVALID_HANDLE_VALUE) {
-				CloseHandle(piArray[i].hProcess);
-				piArray[i].hProcess = NULL;
-			}
-			if (piArray[i].hThread != NULL && piArray[i].hThread != INVALID_HANDLE_VALUE) {
-				CloseHandle(piArray[i].hThread);
-				piArray[i].hThread = NULL;
-			}
-		}
-		delete[] piArray;
-		piArray = nullptr;
-	}
-
-	if (employees != nullptr) {
-		delete[] employees;
-		employees = nullptr;
-	}
+    if (employees != nullptr) {
+        delete[] employees;
+        employees = nullptr;
+    }
 }
 
 int main()
 {
-	getFileName(fileName);
+    getFileName(fileName);
 
-	string numberOfEmployeesWelcome = "Enter number of employees: \n";
-	getNumber(numberOfEmployees, numberOfEmployeesWelcome);
+    string numberOfEmployeesWelcome = "Enter number of employees: \n";
+    getNumber(numberOfEmployees, numberOfEmployeesWelcome);
 
-	employees = new Employee[numberOfEmployees];
+    employees = new Employee[numberOfEmployees];
 
-	std::set<int> usedIds;
-	for (int i = 0; i < numberOfEmployees; i++) {
-		std::cout << "\n=== Enter data for employee " << i + 1 << " ===\n";
-		getEmployeeData(employees[i], i, usedIds);
-		string hoursWelcome = "Enter employee hours:\n";
-		getDouble(employees[i].hours, hoursWelcome);
-	}
+    std::set<int> usedIds;
+    for (int i = 0; i < numberOfEmployees; i++) {
+        std::cout << "\n=== Enter data for employee " << i + 1 << " ===\n";
+        getEmployeeData(employees[i], i, usedIds);
+        string hoursWelcome = "Enter employee hours:\n";
+        getDouble(employees[i].hours, hoursWelcome);
+    }
 
-	std::ofstream out(fileName, std::ios::binary | std::ios::out);
-	if (out.fail()) {
-		std::cerr << "\nError: Failed to create or open file '" << fileName << "'\n";
+    std::ofstream out(fileName, std::ios::binary | std::ios::out);
+    if (!out.is_open()) {
+        std::cerr << "\nError: Failed to create or open binary file '" << fileName << "'\n";
+        delete[] employees;
+        std::cout << "Press any key to exit...\n";
+        _getch();
+        return 1;
+    }
 
-		delete[] employees;
-		std::cout << "Press any key to exit...\n";
-		_getch();
-		return 1;
-	}
+    out.write(reinterpret_cast<const char*>(&numberOfEmployees), sizeof(numberOfEmployees));
+    for (int i = 0; i < numberOfEmployees; i++) {
+        out.write(reinterpret_cast<const char*>(&employees[i]), sizeof(Employee));
+    }
+    out.close();
 
-	out.write(reinterpret_cast<const char*>(&numberOfEmployees), sizeof(numberOfEmployees));
+    std::cout << "\nBinary file '" << fileName << "' created successfully.\n";
 
-	for (int i = 0; i < numberOfEmployees; i++) {
-		//out << employees[i].num << " " << employees[i].name << " " << employees[i].hours << "\n";
-		out.write(reinterpret_cast<const char*>(&employees[i]), sizeof(Employee));
-	}
+    std::cout << "\n=== Contents of binary file ===" << std::endl;
 
-	out.close();
+    std::ifstream in(fileName, std::ios::binary | std::ios::in);
+    if (!in.is_open()) {
+        std::cerr << "Error: Failed to open binary file for reading\n";
+        delete[] employees;
+        return 1;
+    }
 
-	std::ifstream in(fileName, std::ios::binary | std::ios::in);
-	if (in.fail()) {
-		std::cerr << "\nError: Failed to create or open binary file '" << fileName << "'\n";
+    showEmployees(in);
+    in.close();
 
-		delete[] employees;
-		std::cout << "Press any key to exit...\n";
-		_getch();
-		return 1;
-	}
+    employeeSync = new EmployeeSync[numberOfEmployees];
+    for (int i = 0; i < numberOfEmployees; i++) {
+        employeeSync[i].readMutex = CreateMutex(NULL, FALSE, NULL);
+        employeeSync[i].writeSemafore = CreateSemaphore(NULL, 1, 1, NULL);
+        employeeSync[i].employeeDataMutex = CreateMutex(NULL, FALSE, NULL);
+        employeeSync[i].readerCount = 0;
 
-	int ID;
-	std::string name;
-	double hours;
+        if (!employeeSync[i].readMutex || !employeeSync[i].writeSemafore || !employeeSync[i].employeeDataMutex) {
+            std::cerr << "Failed to create synchronization objects\n";
+            cleanUp();
+            return 1;
+        }
+    }
 
-	int fileRecordCount;
-	in.read(reinterpret_cast<char*>(&fileRecordCount), sizeof(fileRecordCount));
+    string numberOfClientsWelcome = "\nEnter number of clients: \n";
+    getNumber(numberOfClients, numberOfClientsWelcome);
 
-	if (fileRecordCount != numberOfEmployees) {
-		std::cout << "\nWarning: File contains " << fileRecordCount
-			<< " records, expected " << numberOfEmployees << std::endl;
-	}
+    std::cout << "\nCreating named pipe before starting clients...\n";
 
-	std::cout << "\n=== Contents of binary file '" << fileName << "' ===" << std::endl;
-	std::cout << "Total records: " << fileRecordCount << std::endl;
+    HANDLE hListenerThread = CreateThread(NULL, 0, pipeListener, NULL, 0, NULL);
+    if (hListenerThread == NULL) {
+        std::cerr << "Failed to create listener thread. Error: " << GetLastError() << "\n";
+        cleanUp();
+        return 1;
+    }
 
-	Employee emp;
-	for (int i = 0; i < fileRecordCount; i++) {
-		in.read(reinterpret_cast<char*>(&emp), sizeof(Employee));
+    Sleep(1000);
 
-		if (in.gcount() != sizeof(Employee)) {
-			std::cerr << "Error reading employee #" << i + 1 << std::endl;
-			break;
-		}
+    std::cout << "Named pipe should be ready. Starting clients...\n";
 
-		std::cout << "\nRecord #" << i + 1 << ":" << std::endl;
-		std::cout << "ID of employee: " << emp.num << std::endl;
-		std::cout << "Name of employee: " << emp.name << std::endl;
-		std::cout << "Hours of employee: " << emp.hours << std::endl;
-	}
+    piArray = new PROCESS_INFORMATION[numberOfClients];
+    for (int i = 0; i < numberOfClients; ++i) {
+        STARTUPINFO si;
+        ZeroMemory(&si, sizeof(STARTUPINFO));
+        si.cb = sizeof(STARTUPINFO);
+        ZeroMemory(&piArray[i], sizeof(PROCESS_INFORMATION));
 
-	/*for (int i = 0; i < numberOfEmployees; i++)
-	{
-		in >> ID >> name >> hours;
-		std::cout << "\nID of employee: " << ID << "\nName of employee: " << name << "\nHours of employee: " << hours << "\n";
-	}*/
+        std::wstring cmd = L"Client.exe";
+        if (!CreateProcess(NULL, &cmd[0], NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &piArray[i])) {
+            std::cerr << "Failed to create client process " << i + 1 << ". Error: " << GetLastError() << "\n";
+        }
+        else {
+            std::cout << "Client process " << i + 1 << " started.\n";
+        }
+    }
 
-	in.close();
+    std::cout << "\nWaiting for all clients to finish...\n";
+    for (int i = 0; i < numberOfClients; i++) {
+        if (piArray[i].hProcess != NULL) {
+            WaitForSingleObject(piArray[i].hProcess, INFINITE);
+            std::cout << "Client " << i + 1 << " finished.\n";
+        }
+    }
 
-	string numberOfClientsWelcome = "\nEnter number of clients: \n";
-	getNumber(numberOfClients, numberOfClientsWelcome);
+    Sleep(2000);
 
-	hStartedEvent = new HANDLE[numberOfClients];
-	hSemaphore = new HANDLE[numberOfEmployees];
+    std::cout << "\nAll clients have finished their work.\n";
 
-	for (int i = 0; i < numberOfEmployees; i++) {
-		hSemaphore[i] = CreateSemaphore(NULL, numberOfClients, numberOfClients, L"hSemahpore");
-	}
+    std::cout << "\n=== Final contents of binary file ===" << std::endl;
 
-	piArray = new PROCESS_INFORMATION[numberOfClients];
-	for (int i = 0; i < numberOfClients; ++i)
-	{
-		STARTUPINFO si;
-		PROCESS_INFORMATION pi;
+    std::ifstream fin(fileName, std::ios::binary | std::ios::in);
+    if (fin.is_open()) {
+        showEmployees(fin);
+        fin.close();
+    }
+    else {
+        std::cerr << "Error: Failed to open final file for reading\n";
+    }
 
-		std::string cmd = "Client.exe";
-		std::wstring cmdToWString = std::wstring(cmd.begin(), cmd.end());
-		LPWSTR clientCmdLine = &cmdToWString[0];
-		ZeroMemory(&si, sizeof(STARTUPINFO));
-		si.cb = sizeof(STARTUPINFO);
+    cleanUp();
 
-		CreateProcess(NULL, clientCmdLine, NULL, NULL, TRUE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &piArray[i]);
+    if (hListenerThread != NULL) {
+        WaitForSingleObject(hListenerThread, 2000);
+        CloseHandle(hListenerThread);
+    }
 
-		hStartedEvent[i] = CreateEvent(NULL, FALSE, FALSE, L"Process Started"); //автоматический сброс, начальное состояние не сигнальное
+    std::cout << "\nPress any key to finish the server: ";
+    _getch();
 
-		//CloseHandle(pi.hProcess);
-	}
-
-	WaitForMultipleObjects(numberOfClients, hStartedEvent, TRUE, INFINITE);
-
-	hPipe = new HANDLE[numberOfClients];
-	hThreads = new HANDLE[numberOfClients];
-
-	for (int i = 0; i < numberOfClients; i++)
-	{
-		hPipe[i] = CreateNamedPipe(L"\\\\.\\pipe\\pipe_name", PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, PIPE_UNLIMITED_INSTANCES,
-			0, 0, INFINITE, NULL);
-
-		if (hPipe == INVALID_HANDLE_VALUE)
-		{
-			std::cout << "Creation of the named pipe failed.\n The last error code: " << GetLastError() << "\n";
-			cleanUp();
-			std::cout << "Press any char to finish server: ";
-			_getch();
-			return 0;
-		}
-
-		if (!ConnectNamedPipe(hPipe[i], (LPOVERLAPPED)NULL)) //связь синхронная
-		{
-			std::cout << "The connection failed.\nThe last error code: " << GetLastError() << "\n";
-			cleanUp();
-			std::cout << "Press any char to finish the server: ";
-			_getch();
-			return 0;
-		}
-
-		hThreads[i] = CreateThread(NULL, 0, messaging, static_cast<LPVOID>(hPipe[i]), 0, NULL);
-	}
-
-	WaitForMultipleObjects(numberOfClients, hThreads, TRUE, INFINITE);
-
-	std::cout << "All clients has ended their work.";
-
-	in.open(fileName);
-	if (in.fail()) {
-		std::cerr << "\nError: Failed to create or open file '" << fileName << "'\n";
-
-		delete[] employees;
-		std::cout << "Press any key to exit...\n";
-		_getch();
-		return 1;
-	}
-
-	for (int i = 0; i < numberOfEmployees; i++)
-	{
-		in >> ID >> name >> hours;
-		std::cout << "\nID of employee: " << ID << "\nName of employee: " << name << "\nHours of employee: " << hours << "\n";
-	}
-
-	in.close();
-
-	cleanUp();
-	std::cout << "Press any char to finish the server: \n";
-	_getch();
-
-	return 0;
+    return 0;
 }
