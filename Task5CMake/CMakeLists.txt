@@ -19,6 +19,21 @@ add_executable(Client
     Headers/Employee.h
 )
 
+# Сервер-20
+add_executable(Server-20 
+    Server-20.cpp 
+    Headers/Functions.h
+    Headers/Employee.h
+)
+
+# Клиент-20
+add_executable(Client-20 
+    Client-20.cpp
+    Headers/Functions.h
+    Headers/Employee.h
+)
+
+
 # Google Test
 include(FetchContent)
 FetchContent_Declare(
