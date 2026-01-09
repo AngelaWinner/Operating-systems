@@ -1,60 +1,61 @@
-# Employee Salary Management System
+# Лабораторная работа №1: Создание процессов
 
-The Employee Salary Management System is a C++ console application designed to demonstrate multi-process architecture using the Windows API. The system consists of a main orchestrating process and two utility processes: one for creating binary data files containing employee records and another for generating text-based salary reports based on that data.
+## Описание проекта
 
-## Features
+Это консольное приложение на C++ для управления записями о сотрудниках с поддержкой многопроцессной архитектуры на Windows. Система состоит из основного процесса и двух вспомогательных утилит для создания бинарных файлов с данными сотрудников и генерации текстовых отчетов о заработной плате.
 
-*   **Multi-process Architecture:** Utilizes Windows API (`CreateProcess`, `WaitForSingleObject`) to manage independent utilities.
-*   **Binary Data Management:** Stores employee information (ID, Name, Hours Worked) in a structured binary format.
-*   **Automated Reporting:** Reads binary data to calculate wages based on an hourly rate and exports the results to a readable text file.
-*   **Process Synchronization:** Ensures data integrity by waiting for child processes to complete before proceeding to the next execution step.
+## Особенности
 
-## Installation
+- **Многопроцессная архитектура**: Использует Windows API (`CreateProcess`, `WaitForSingleObject`) для управления независимыми процессами
+- **Бинарное хранение данных**: Сохраняет информацию о сотрудниках (ID, имя, отработанные часы) в структурированном бинарном формате
+- **Автоматическая генерация отчетов**: Читает бинарные данные, вычисляет заработную плату по часовой ставке и экспортирует результаты в текстовый файл
+- **Синхронизация процессов**: Обеспечивает целостность данных, ожидая завершения дочерних процессов перед продолжением выполнения
+- **Валидация входных данных**: Проверка корректности вводимых пользователем данных с использованием регулярных выражений
 
-### Prerequisites
+## Файлы проекта
 
-*   **Operating System:** Microsoft Windows (Required due to dependencies on `<windows.h>`).
-*   **Compiler:** A C++ compiler supporting C++14 or higher (e.g., MSVC, MinGW).
-*   **Build System:** CMake (Version 3.10 or higher recommended).
+### 1. Employee.h
+**Описание**: Определение структуры данных для хранения информации о сотруднике.
+**Содержание**:
+- Структура `Employee` с полями: `num`, `name[10]`, `hours`
+- Конструкторы и операторы сравнения
+- Методы для чтения/записи в текстовом формате
 
-### Build Instructions
+### 2. Creator.cpp
+**Описание**: Программа для создания бинарного файла с данными сотрудников.
+**Функционал**:
+- Интерактивный ввод данных сотрудников
+- Валидация входных данных
+- Запись в бинарный файл
+**Запуск**: `Creator.exe <имя_файла> <количество_записей>`
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/quanted129/OS-projects/SalaryCalculatorProcesses
-    cd ToDoManager
-    ```
-2.  Create a build directory:
-    ```bash
-    mkdir build
-    cd build
-    ```
-3.  Generate the build files using CMake:
-    ```bash
-    cmake ..
-    ```
-4.  Compile the project:
-    ```bash
-    cmake --build .
-    ```
-    This will generate three executables in the build directory: `MainProcess.exe`, `Creator.exe`, and `Reporter.exe`.
+### 3. Reporter.cpp
+**Описание**: Программа для генерации текстовых отчетов о зарплате.
+**Функционал**:
+- Чтение бинарного файла
+- Сортировка сотрудников по имени
+- Расчет заработной платы
+- Запись отчета в текстовый файл
+**Запуск**: `Reporter.exe <входной_файл> <выходной_файл> <ставка_в_час>`
 
-## Usage
+### 4. test.cpp (MainProcess)
+**Описание**: Основная программа для оркестрации всего процесса.
+**Функционал**:
+- Запуск Creator и Reporter как дочерних процессов
+- Отображение промежуточных результатов
+- Управление потоком выполнения
 
-1.  Navigate to the directory where the executables were built.
-2.  Launch the main application:
-    ```bash
-    ./MainProcess.exe
-    ```
-3.  **Binary File Creation:**
-    *   Enter the desired name for the binary file (e.g., `employees.bin`).
-    *   Enter the number of employee records you wish to create.
-    *   The `Creator` utility will start. For each record, input the employee number, name (max 9 characters), and hours worked.
-4.  **Verification:**
-    *   Once data entry is complete, the main program will display the contents of the created binary file on the console.
-5.  **Report Generation:**
-    *   Enter the desired name for the report file (e.g., `report.txt`).
-    *   Enter the hourly payment rate.
-    *   The `Reporter` utility will start, process the binary file, and calculate salaries.
-6.  **Final Output:**
-    *   The main program will display the generated report on the console and then terminate.
+### 5. UnitTest.cpp
+**Описание**: Модульные тесты для проверки корректности работы структуры Employee.
+
+**Требования**:
+- Компилятор C++ с поддержкой C++14 или выше
+- Операционная система Windows
+- Библиотеки: Windows API, STL
+
+## Примечания
+
+1. Имена сотрудников ограничены 9 символами
+2. Все числовые значения проверяются на корректность
+3. При ошибках используются значения по умолчанию (4 записи, ставка 30)
+4. Проект предназначен только для Windows из-за использования Windows API
